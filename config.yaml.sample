@@ -1,0 +1,7 @@
+server:
+  port: # Server Port
+  env: # Server Environment
+
+storage:
+  database_url: # Database URL
+  redis_url: # Redis URL
