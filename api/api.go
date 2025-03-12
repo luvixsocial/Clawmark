@@ -12,9 +12,10 @@ import (
 type DefaultResponder struct{}
 
 func (d DefaultResponder) New(err string, ctx map[string]string) any {
-	return types.ApiError{
-		Message: err,
+	return types.Response{
+		Success: false,
 		Context: ctx,
+		Message: &err,
 	}
 }
 
