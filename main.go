@@ -32,6 +32,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"golang.org/x/time/rate"
 
+	"clawmark/routes/test"
+
 	_ "embed"
 )
 
@@ -156,15 +158,15 @@ func main() {
 
 	docs.DocsSetupData = &docs.SetupData{
 		URL:         "https://api.luvix.social/",
-		ErrorStruct: types.ApiError{},
+		ErrorStruct: types.Response{},
 		Info: docs.Info{
 			Title:          "Luvix Social by Purrquinox",
-			TermsOfService: "https://purrquinox.com/legal/terms",
+			TermsOfService: "https://luvix.social/legal/terms",
 			Version:        "1.0",
 			Description:    "Redefining Connection in a Seamless, Privacy-Focused World.",
 			Contact: docs.Contact{
 				Name:  "Purrquinox",
-				URL:   "https://purrquinox.com",
+				URL:   "https://luvix.social/",
 				Email: "support@purrquinox.com",
 			},
 			License: docs.License{
@@ -195,7 +197,9 @@ func main() {
 		zapchi.Logger(state.Logger, "api"),
 	)
 
-	routers := []uapi.APIRouter{}
+	routers := []uapi.APIRouter{
+		test.Router{},
+	}
 
 	for _, router := range routers {
 		name, desc := router.Tag()
