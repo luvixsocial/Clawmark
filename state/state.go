@@ -5,20 +5,22 @@ import (
 	"os"
 
 	"clawmark/config"
+	"clawmark/types"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/go-playground/validator/v10/non-standard/validators"
 	"github.com/infinitybotlist/eureka/genconfig"
 	"github.com/infinitybotlist/eureka/snippets"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 var (
-	Pool      *pgxpool.Pool
+	Pool      *gorm.DB
 	Redis     *redis.Client
 	Logger    *zap.Logger
 	Context   = context.Background()
@@ -49,12 +51,20 @@ func Setup() {
 		panic("config validation error: " + err.Error())
 	}
 
-	// Initialize PostgreSQL connection
-	Pool, err = pgxpool.New(Context, Config.Database.DatabaseURL)
-	if err != nil {
-		panic("Failed to connect to PostgreSQL: " + err.Error())
-	}
+	// Initalize Gorm connection
+	Pool, err = gorm.Open(postgres.Open(Config.Database.DatabaseURL), &gorm.Config{})
+    if err != nil {
+        panic("Failed to connect to database: %v" + err.Error())
+    }
 
+	Pool.AutoMigrate(&types.User{})
+	Pool.AutoMigrate(&types.Post{})
+	Pool.AutoMigrate(&types.PostPlugin{})
+	Pool.AutoMigrate(&types.Comment{})
+	Pool.AutoMigrate(&types.Like{})
+	Pool.AutoMigrate(&types.Dislike{})
+	Pool.AutoMigrate(&types.Follow{})
+	
 	// Initialize Redis connection
 	rOptions, err := redis.ParseURL(Config.Database.RedisURL)
 	if err != nil {

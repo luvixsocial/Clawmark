@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	"clawmark/state"
 	"clawmark/types"
 )
 
-func GetUserFeed(userID string, limit int) ([]int, []types.Post, error) {
+func GetUserFeed(userID uuid.UUID, limit int) ([]uuid.UUID, []types.Post, error) {
 	personalized, err := getPersonalizedFeed(userID, limit/2)
 	if err != nil {
 		log.Println("Error fetching personalized feed:", err)
@@ -21,8 +22,8 @@ func GetUserFeed(userID string, limit int) ([]int, []types.Post, error) {
 		log.Println("Error fetching random posts:", err)
 	}
 
-	postSet := make(map[int]bool)
-	finalFeed := []int{}
+	postSet := make(map[uuid.UUID]bool)
+	finalFeed := []uuid.UUID{}
 
 	for _, post := range personalized {
 		postSet[post] = true
@@ -43,122 +44,75 @@ func GetUserFeed(userID string, limit int) ([]int, []types.Post, error) {
 	return finalFeed, fullPosts, nil
 }
 
-func getPersonalizedFeed(userID string, limit int) ([]int, error) {
-	tags, err := state.Redis.ZRevRange(state.Context, fmt.Sprintf("user:%s:tag_scores", userID), 0, 4).Result()
+func getPersonalizedFeed(userID uuid.UUID, limit int) ([]uuid.UUID, error) {
+	var tags []string
+	err := state.Redis.ZRevRange(state.Context, fmt.Sprintf("user:%s:tag_scores", userID), 0, 4).ScanSlice(&tags)
 	if err != nil {
 		return nil, err
 	}
 
-	query := `SELECT id, tags FROM posts WHERE tags && $1 ORDER BY created_at DESC LIMIT $2`
-	rows, err := state.Pool.Query(state.Context, query, tags, limit)
+	var posts []types.Post
+	err = state.Pool.Where("tags && ?", tags).Order("created_at DESC").Limit(limit).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var posts []int
-	for rows.Next() {
-		var postID int
-		var postTags []string
-		if err := rows.Scan(&postID, &postTags); err != nil {
-			log.Println("Error scanning post:", err)
-			continue
-		}
-
-		score := computePersonalizedScore(userID, postID, postTags)
-
+	var postIDs []uuid.UUID
+	for _, post := range posts {
+		score := computePersonalizedScore(userID, post.ID, post.Tags)
 		state.Redis.ZAdd(state.Context, fmt.Sprintf("user:%s:feed", userID), redis.Z{
 			Score:  score,
-			Member: postID,
+			Member: post.ID,
 		})
-
-		posts = append(posts, postID)
-	}
-
-	postIDsStr, err := state.Redis.ZRevRange(state.Context, fmt.Sprintf("user:%s:feed", userID), 0, int64(limit)-1).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	var postIDs []int
-	for _, postIDStr := range postIDsStr {
-		var postID int
-		if _, err := fmt.Sscanf(postIDStr, "%d", &postID); err != nil {
-			log.Println("Error parsing post ID:", err)
-			continue
-		}
-		postIDs = append(postIDs, postID)
+		postIDs = append(postIDs, post.ID)
 	}
 
 	return postIDs, nil
 }
 
-func getRandomPosts(limit int) ([]int, error) {
-	rows, err := state.Pool.Query(state.Context, "SELECT id FROM posts ORDER BY RANDOM() LIMIT $1", limit)
+func getRandomPosts(limit int) ([]uuid.UUID, error) {
+	var posts []types.Post
+	err := state.Pool.Order("RANDOM()").Limit(limit).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var postIDs []int
-	for rows.Next() {
-		var postID int
-		if err := rows.Scan(&postID); err != nil {
-			log.Println("Error scanning post ID:", err)
-			continue
-		}
-		postIDs = append(postIDs, postID)
+	var postIDs []uuid.UUID
+	for _, post := range posts {
+		postIDs = append(postIDs, post.ID)
 	}
 
 	return postIDs, nil
 }
 
-func getPostsByID(postIDs []int) ([]types.Post, error) {
+func getPostsByID(postIDs []uuid.UUID) ([]types.Post, error) {
 	if len(postIDs) == 0 {
 		return []types.Post{}, nil
 	}
 
-	query := `SELECT id, title, content, tags, created_at FROM posts WHERE id = ANY($1)`
-	rows, err := state.Pool.Query(state.Context, query, postIDs)
+	var posts []types.Post
+	err := state.Pool.Where("id IN ?", postIDs).Find(&posts).Error
 	if err != nil {
 		return nil, err
-	}
-	defer rows.Close()
-
-	var posts []types.Post
-	for rows.Next() {
-		var p types.Post
-		if err := rows.Scan(&p.ID, &p.Title, &p.Content, &p.Tags, &p.CreatedAt); err != nil {
-			log.Println("Error scanning full post:", err)
-			continue
-		}
-		posts = append(posts, p)
 	}
 
 	return posts, nil
 }
 
-func computePersonalizedScore(userID string, postID int, tags []string) float64 {
-	rows, err := state.Pool.Query(state.Context, "SELECT post_id FROM user_interactions WHERE user_id = $1", userID)
+func computePersonalizedScore(userID uuid.UUID, postID uuid.UUID, tags []string) float64 {
+	var interactions []types.Like
+	err := state.Pool.Where("user_id = ?", userID).Find(&interactions).Error
 	if err != nil {
 		log.Println("Error fetching interactions:", err)
 		return 0
 	}
-	defer rows.Close()
-
-	interactionHistory := make(map[int]bool)
-	for rows.Next() {
-		var interactedPostID int
-		if err := rows.Scan(&interactedPostID); err != nil {
-			log.Println("Error scanning interaction:", err)
-			continue
-		}
-		interactionHistory[interactedPostID] = true
-	}
 
 	interactionBoost := 0.0
-	if interactionHistory[postID] {
-		interactionBoost = 5.0
+	for _, interaction := range interactions {
+		if interaction.PostID == postID {
+			interactionBoost = 5.0
+			break
+		}
 	}
 
 	tagMatchScore := 0.0
@@ -170,7 +124,7 @@ func computePersonalizedScore(userID string, postID int, tags []string) float64 
 	return tagMatchScore + interactionBoost
 }
 
-func notifyUser(userID string) {
+func notifyUser(userID uuid.UUID) {
 	feed, fullPosts, err := GetUserFeed(userID, 10)
 	if err != nil {
 		log.Println("Error notifying user:", err)
@@ -181,6 +135,6 @@ func notifyUser(userID string) {
 	notifyClientsForUser(userID, message)
 }
 
-func notifyClientsForUser(userID, message string) {
+func notifyClientsForUser(userID uuid.UUID, message string) {
 	fmt.Printf("Sending real-time update to user %s: %s\n", userID, message)
 }

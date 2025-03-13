@@ -3,85 +3,74 @@ package types
 import (
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/google/uuid"
 )
 
+// Base model to include ID as UUID
+type BaseModel struct {
+	ID uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type User struct {
-	ID        uint   `gorm:"primaryKey"`
+	BaseModel
 	Username  string `gorm:"uniqueIndex;not null"`
 	Email     string `gorm:"uniqueIndex;not null"`
 	Password  string `gorm:"not null"`
 	AvatarURL string `gorm:"default:''"`
 	Bio       string `gorm:"type:text"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
-	Posts     []Post         `gorm:"foreignKey:UserID"`
-	Comments  []Comment      `gorm:"foreignKey:UserID"`
-	Likes     []Like         `gorm:"foreignKey:UserID"`
-	Dislikes  []Dislike      `gorm:"foreignKey:UserID"`
-	Follows   []Follow       `gorm:"foreignKey:FollowerID"`
+	Posts     []Post `gorm:"foreignKey:UserID"`
 }
 
 type Post struct {
-	ID          uint   `gorm:"primaryKey"`
-	UserID      uint   `gorm:"not null;index"`
-	Content     string `gorm:"type:text;not null"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   gorm.DeletedAt `gorm:"index"`
-	User        User           `gorm:"foreignKey:UserID"`
-	Comments    []Comment      `gorm:"foreignKey:PostID"`
-	Likes       []Like         `gorm:"foreignKey:PostID"`
-	Dislikes    []Dislike      `gorm:"foreignKey:PostID"`
-	PostPlugins []PostPlugin   `gorm:"foreignKey:PostID"`
-}
-
-type PostPlugin struct {
-	ID        uint   `gorm:"primaryKey"`
-	PostID    uint   `gorm:"not null;index"`
-	Type      string `gorm:"not null"` // e.g., "image", "gif", "sticker"
-	URL       string `gorm:"not null"`
-	HTML      string
-	CreatedAt time.Time
-	Post      Post `gorm:"foreignKey:PostID"`
+	BaseModel
+	UserID      uuid.UUID `gorm:"not null;index"`
+	Content     string    `gorm:"type:text;not null"`
+	Tags 	  []string  `gorm:"type:text[]"`
+	User        User      `gorm:"foreignKey:UserID"`
+	Comments    []Comment `gorm:"foreignKey:PostID"`
+	PostPlugins []PostPlugin `gorm:"foreignKey:PostID"`
 }
 
 type Comment struct {
-	ID        uint   `gorm:"primaryKey"`
-	UserID    uint   `gorm:"not null;index"`
-	PostID    uint   `gorm:"not null;index"`
-	Content   string `gorm:"type:text;not null"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
-	User      User           `gorm:"foreignKey:UserID"`
-	Post      Post           `gorm:"foreignKey:PostID"`
+	BaseModel
+	UserID  uuid.UUID `gorm:"not null;index"`
+	PostID  uuid.UUID `gorm:"not null;index"`
+	Content string    `gorm:"type:text;not null"`
+	User    User      `gorm:"foreignKey:UserID"`
+	Post    Post      `gorm:"foreignKey:PostID"`
+}
+
+type PostPlugin struct {
+	BaseModel
+	PostID    uuid.UUID   `gorm:"not null;index"`
+	Type      string `gorm:"not null"` // e.g., "image", "gif", "sticker"
+	URL       string `gorm:"not null"`
+	HTML      string
+	Post      Post `gorm:"foreignKey:PostID"`
 }
 
 type Like struct {
-	ID        uint `gorm:"primaryKey"`
-	UserID    uint `gorm:"not null;index"`
-	PostID    uint `gorm:"not null;index"`
-	CreatedAt time.Time
+	BaseModel
+	UserID    uuid.UUID `gorm:"not null;index"`
+	PostID    uuid.UUID `gorm:"not null;index"`
 	User      User `gorm:"foreignKey:UserID"`
 	Post      Post `gorm:"foreignKey:PostID"`
 }
 
 type Dislike struct {
-	ID        uint `gorm:"primaryKey"`
-	UserID    uint `gorm:"not null;index"`
-	PostID    uint `gorm:"not null;index"`
-	CreatedAt time.Time
+	BaseModel
+	UserID    uuid.UUID `gorm:"not null;index"`
+	PostID    uuid.UUID `gorm:"not null;index"`
 	User      User `gorm:"foreignKey:UserID"`
 	Post      Post `gorm:"foreignKey:PostID"`
 }
 
 type Follow struct {
-	ID          uint `gorm:"primaryKey"`
-	FollowerID  uint `gorm:"not null;index"`
-	FollowingID uint `gorm:"not null;index"`
-	CreatedAt   time.Time
+	BaseModel
+	FollowerID  uuid.UUID `gorm:"not null;index"`
+	FollowingID uuid.UUID `gorm:"not null;index"`
 	Follower    User `gorm:"foreignKey:FollowerID"`
 	Following   User `gorm:"foreignKey:FollowingID"`
 }

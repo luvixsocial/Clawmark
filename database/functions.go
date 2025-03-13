@@ -1,16 +1,18 @@
 package database
 
 import (
-	"clawmark/state"
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func main() {
-	state.Pool.Config()
-
-	userID := "user-123"
+	userID, err := uuid.Parse("user-123")
+	if err != nil {
+		log.Fatal("Invalid UUID:", err)
+	}
 	limit := 10
 
 	feed, fullPosts, err := GetUserFeed(userID, limit)
